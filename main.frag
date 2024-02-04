@@ -73,17 +73,42 @@ vec3 reflectLight(Light light, vec3 pos ,vec3 normal){
     return reflectedLight;
 }
 
+vec3 lerp(vec3 a, vec3 b, float t){
+    t = clamp(t,0.,1.);
+    vec3 diff = b-a;
+    return diff * t + a;
+}
+
+vec3 softShadow(vec3 pos, Light light, Plane plane, Sphere sphere){
+    vec3 initPos = pos;
+    vec3 rd = normalize(light.pos - pos);//may need to be inverted
+    float minDist;
+    float step ;
+    for (int i = 0; i < 150; i++){
+        pos += rd*step;
+        minDist = (step,objectSDF(pos,plane,sphere));
+        step = objectSDF(pos,plane,sphere);
+        if (pos-initPos == light.pos-pos){
+            break;
+        }
+        if(step < 0.001){
+            return vec3(-0.1);
+        }
+    }
+}
+
 vec3 render(vec2 uv){
     vec3 ro = vec3(0,0,-imgDist);
     vec3 rd = vec3(uv.xy, imgDist);
+    vec3 skyColor = vec3(0.5725, 0.8588, 1.0);
     normalize(rd);
     
-    Light light = Light(vec3(0. , 2.  , 6.), 2.0);
+    Light light = Light(vec3(0. , 5.0  , 6.), 2.0);
     Sphere sphere = Sphere(
         vec3(0. + sin(2. * u_time),0, 6. + cos(2. * u_time))
         ,2.0,
         vec3(0.1216, 0.1216, 0.8353),
-        .5
+        .3
     );
     Plane plane = Plane(
         vec3(0,-3.0,0),
@@ -95,13 +120,9 @@ vec3 render(vec2 uv){
     const int iterationLimit = 300;
     vec3 pos = ro;
 
-    // float step = sphereSDF(pos, sphere);
-    // float step = planeSDF(pos, plane);
     float step = objectSDF(pos, plane, sphere);
     for (int i = 0; i < iterationLimit; i ++){
         pos += rd * step;
-        // step = sphereSDF(pos, sphere);
-        // step = planeSDF(pos, plane);
         step = objectSDF(pos,plane,sphere);
         if (step > 100.){
             break;
@@ -111,8 +132,7 @@ vec3 render(vec2 uv){
             vec3 viewReflection = reflect(rd,surfaceNormal);            
             vec3 lightReflection = reflectLight(light,pos,surfaceNormal);
 
-            vec3 ambient = vec3(0.3);
-            // ambient = vec3(light.intensity * inverseSquare(light.pos.y));
+            vec3 ambient = vec3(0.2);
 
             vec3 diffuse;
             diffuse += vec3(max(dot(surfaceNormal, normalize(light.pos-pos)),0.));
@@ -120,6 +140,9 @@ vec3 render(vec2 uv){
             vec3 specular = vec3(max(0.,sphere.gloss * dot(viewReflection, lightReflection)));
             
             vec3 lighting = ambient + diffuse + specular;
+
+            vec3 shadow = softShadow(pos,light,plane,sphere);
+            lighting += shadow;
             
             float sphereDist = sphereSDF(pos,sphere);
             float planeDist = planeSDF(pos,plane);
@@ -128,14 +151,13 @@ vec3 render(vec2 uv){
                 return  (sphere.color) * lighting;
             }
             else if(planeDist < sphereDist){
-                // float fog = (500.-length(pos)/400.-length(pos));
-                return (plane.color) * lighting;
-                // return vec3(fog);
+                float fogRate = .0075;
+                return lerp(plane.color * lighting, skyColor, (length(pos)-5.) * fogRate);
             }
         }
     }
 
-    return vec3(0.5725, 0.8588, 1.0);
+    return skyColor;
 }
 
 void main(){ 
