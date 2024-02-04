@@ -26,6 +26,7 @@ struct Plane{
 
 float planeSDF(vec3 pos, Plane plane){
     return pos.y - plane.position.y;
+    // return pos.y;
 }
 
 float sphereSDF(vec3 pos, Sphere sphere){
@@ -58,11 +59,11 @@ vec3 render(vec2 uv){
     vec3 rd = vec3(uv.xy, imgDist);
     normalize(rd);
     
-    Light light = Light(vec3(0,2,6) , 40.0);
+    Light light = Light(vec3(0, 0, 6) , 40.0);
     Sphere sphere = Sphere(
         vec3(0. + cos(u_time),0, 6. + sin(u_time))
         ,2.0,
-        vec3(0.0, 0.1, 1.0)
+        vec3(0.302, 0.0235, 0.0235)
     );
     Plane plane = Plane(
         vec3(0,-10.0,0),
@@ -74,35 +75,35 @@ vec3 render(vec2 uv){
     const int iterationLimit = 250;
     vec3 pos = ro;
 
-    // float step = sphereSDF(pos, sphere);
+    float step = sphereSDF(pos, sphere);
     // float step = objectSDF(pos, plane, sphere);
-    // for (int i = 0; i < iterationLimit; i ++){
-    //     pos += rd * step;
-    //     // step = sphereSDF(pos, sphere);
-    //     step = objectSDF(pos,plane,sphere);
-    //     if (step < 0.01){
-            // // float dist = length(pos - ro);
-            // // float percentage =  1. - (dist - sphereSDF(ro,sphere)) / sphereSDF(ro,sphere);
-            // vec3 surfaceNormal = calculateNormal(pos,plane,sphere);
-            // vec3 reflection = reflect(rd,surfaceNormal);
-            // vec3 lightReflection = light.intensity * reflect(normalize( light.pos - pos),surfaceNormal);
-            // return sphere.color * .3 * dot(reflection, lightReflection);
-    //     }
-    // }
-
-    float step = planeSDF(pos, plane);
     for (int i = 0; i < iterationLimit; i ++){
         pos += rd * step;
-        step = planeSDF(pos, plane);
+        step = sphereSDF(pos, sphere);
+        // step = objectSDF(pos,plane,sphere);
         if (step < 0.01){
-            float dist = length(pos - ro);
             vec3 surfaceNormal = calculateNormal(pos,plane,sphere);
             vec3 reflection = reflect(rd,surfaceNormal);
-            vec3 lightReflection = 1. * light.intensity * reflect(normalize(light.pos - pos),surfaceNormal);
-            return plane.color * dot(reflection, lightReflection);;
-            // return plane.color - 0.02 * sqrt(dist);
+            vec3 lightReflection = light.intensity * reflect(normalize( light.pos - pos),surfaceNormal);
+            // return sphere.color * dot(reflection, lightReflection);
+            return surfaceNormal;
         }
     }
+
+    // float step = planeSDF(pos, plane);
+    // for (int i = 0; i < iterationLimit; i ++){
+    //     pos += rd * step;
+    //     step = planeSDF(pos, plane);
+    //     if (step < 0.01){
+    //         // float dist = length(pos - ro);
+    //         vec3 surfaceNormal = calculateNormal(pos,plane,sphere);
+    //         vec3 reflection = reflect(rd,surfaceNormal);
+    //         vec3 lightReflection = light.intensity * reflect(normalize(light.pos - pos),surfaceNormal);
+    //         // return plane.color * dot(reflection, lightReflection);
+    //         return surfaceNormal;
+    //         // return plane.color - 0.02 * sqrt(dist);
+    //     }
+    // }
 
     return vec3(1);
 
