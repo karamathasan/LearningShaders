@@ -4,10 +4,26 @@ uniform float u_time;
 uniform vec2 u_resolution;
 const float imgDist = 1.;
 
+//dimensions are in width, length, depth to resemble xyz
+struct Rect{
+    vec3 dimensions;
+    vec3 position;
+    vec3 orientation;// facing right by default, (1,0,0)
+    vec3 color;
+    vec3 gloss;
+};
+
+float RectSDF(vec3 pos, Rect rect){
+    float centerDist = length(rect.position - pos);
+    // float rectOverlap = orientation
+    return centerDist;
+}
+
 struct Sphere{
     vec3 pos;
     float radius;
     vec3 color;
+    float gloss;
 };
 
 struct Light{
@@ -17,16 +33,13 @@ struct Light{
 
 struct Plane{
     vec3 position;
-    vec3 axis1;
-    vec3 axis2;
+    vec3 normal;
     vec3 color;
 };
 
-
-
 float planeSDF(vec3 pos, Plane plane){
+    // return plane.position.y - pos.y;
     return pos.y - plane.position.y;
-    // return pos.y;
 }
 
 float sphereSDF(vec3 pos, Sphere sphere){
@@ -40,18 +53,24 @@ float objectSDF(vec3 pos, Plane plane, Sphere sphere){
 }
 
 vec3 calculateNormal(vec3 pos, Plane plane, Sphere sphere){
-    float epsilon = 0.01;
-    vec3 vector1 = vec3(
-        objectSDF(pos + vec3(epsilon,0,0),plane,sphere),
-        objectSDF(pos + vec3(0,epsilon,0),plane,sphere),
-        objectSDF(pos + vec3(0,0,epsilon),plane,sphere)
-    );
-    vec3 vector2 = vec3(
-        objectSDF(pos - vec3(epsilon,0,0),plane,sphere),
-        objectSDF(pos - vec3(0, epsilon,0),plane,sphere),
-        objectSDF(pos - vec3(0,0,epsilon),plane,sphere)
-    );
-    return vector1-vector2;
+    float epsilon = 0.0001;
+    float centerDistance = objectSDF(pos, plane, sphere);
+    float xDistance = objectSDF((pos + vec3(epsilon, 0, 0)), plane, sphere);
+    float yDistance = objectSDF((pos + vec3(0, epsilon, 0)), plane, sphere);
+    float zDistance = objectSDF((pos + vec3(0, 0, epsilon)), plane, sphere);
+    return (vec3(xDistance,yDistance,zDistance) - centerDistance)/epsilon;
+}
+
+float inverseSquare(float value){
+    return 1./(value*value);
+}
+
+vec3 reflectLight(Light light, vec3 pos ,vec3 normal){
+    vec3 incomingLight = light.pos-pos;
+    vec3 reflectedLight = reflect(normalize(incomingLight), normal);
+    normalize(reflectedLight);
+    reflectedLight *= (light.intensity * inverseSquare(length(incomingLight)));
+    return reflectedLight;
 }
 
 vec3 render(vec2 uv){
@@ -59,64 +78,69 @@ vec3 render(vec2 uv){
     vec3 rd = vec3(uv.xy, imgDist);
     normalize(rd);
     
-    Light light = Light(vec3(0, 0, 6) , 40.0);
+    Light light = Light(vec3(0. , 2.  , 6.), 2.0);
     Sphere sphere = Sphere(
-        vec3(0. + cos(u_time),0, 6. + sin(u_time))
+        vec3(0. + sin(2. * u_time),0, 6. + cos(2. * u_time))
         ,2.0,
-        vec3(0.302, 0.0235, 0.0235)
+        vec3(0.1216, 0.1216, 0.8353),
+        .5
     );
     Plane plane = Plane(
-        vec3(0,-10.0,0),
-        vec3(1,0,0),
-        vec3(0,0,1),
-        vec3(0.4)
+        vec3(0,-3.0,0),
+        vec3(0,1,0),
+        vec3(0.1451, 0.1451, 0.1451)
     );
 
-    const int iterationLimit = 250;
+
+    const int iterationLimit = 300;
     vec3 pos = ro;
 
-    float step = sphereSDF(pos, sphere);
-    // float step = objectSDF(pos, plane, sphere);
+    // float step = sphereSDF(pos, sphere);
+    // float step = planeSDF(pos, plane);
+    float step = objectSDF(pos, plane, sphere);
     for (int i = 0; i < iterationLimit; i ++){
         pos += rd * step;
-        step = sphereSDF(pos, sphere);
-        // step = objectSDF(pos,plane,sphere);
+        // step = sphereSDF(pos, sphere);
+        // step = planeSDF(pos, plane);
+        step = objectSDF(pos,plane,sphere);
+        if (step > 100.){
+            break;
+        }
         if (step < 0.01){
             vec3 surfaceNormal = calculateNormal(pos,plane,sphere);
-            vec3 reflection = reflect(rd,surfaceNormal);
-            vec3 lightReflection = light.intensity * reflect(normalize( light.pos - pos),surfaceNormal);
-            // return sphere.color * dot(reflection, lightReflection);
-            return surfaceNormal;
+            vec3 viewReflection = reflect(rd,surfaceNormal);            
+            vec3 lightReflection = reflectLight(light,pos,surfaceNormal);
+
+            vec3 ambient = vec3(0.3);
+            // ambient = vec3(light.intensity * inverseSquare(light.pos.y));
+
+            vec3 diffuse;
+            diffuse += vec3(max(dot(surfaceNormal, normalize(light.pos-pos)),0.));
+            diffuse += vec3(max(dot(surfaceNormal,vec3(0,1,0)), 0.));//global diffuse from above
+            vec3 specular = vec3(max(0.,sphere.gloss * dot(viewReflection, lightReflection)));
+            
+            vec3 lighting = ambient + diffuse + specular;
+            
+            float sphereDist = sphereSDF(pos,sphere);
+            float planeDist = planeSDF(pos,plane);
+
+            if (sphereDist < planeDist){
+                return  (sphere.color) * lighting;
+            }
+            else if(planeDist < sphereDist){
+                // float fog = (500.-length(pos)/400.-length(pos));
+                return (plane.color) * lighting;
+                // return vec3(fog);
+            }
         }
     }
 
-    // float step = planeSDF(pos, plane);
-    // for (int i = 0; i < iterationLimit; i ++){
-    //     pos += rd * step;
-    //     step = planeSDF(pos, plane);
-    //     if (step < 0.01){
-    //         // float dist = length(pos - ro);
-    //         vec3 surfaceNormal = calculateNormal(pos,plane,sphere);
-    //         vec3 reflection = reflect(rd,surfaceNormal);
-    //         vec3 lightReflection = light.intensity * reflect(normalize(light.pos - pos),surfaceNormal);
-    //         // return plane.color * dot(reflection, lightReflection);
-    //         return surfaceNormal;
-    //         // return plane.color - 0.02 * sqrt(dist);
-    //     }
-    // }
-
-    return vec3(1);
-
-    // return vec3(uv.xy,0);
+    return vec3(0.5725, 0.8588, 1.0);
 }
 
 void main(){ 
-    vec2 uv = vec2(2.0 * gl_FragCoord.xy / u_resolution - 1.);
-
-    
+    vec2 uv = vec2(2.0 * gl_FragCoord.xy / u_resolution - 1.);    
     vec3 color = render(uv);
     gl_FragColor = vec4(color,1.);
-
-
 }
 
