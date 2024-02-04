@@ -2,7 +2,7 @@
 precision mediump float;
 uniform float u_time;
 uniform vec2 u_resolution;
-const float imgDist = 1.0;
+const float imgDist = 1.;
 
 struct Sphere{
     vec3 pos;
@@ -38,16 +38,31 @@ float objectSDF(vec3 pos, Plane plane, Sphere sphere){
     return min(planeSDF(pos,plane) , sphereSDF(pos,sphere));
 }
 
+vec3 calculateNormal(vec3 pos, Plane plane, Sphere sphere){
+    float epsilon = 0.01;
+    vec3 vector1 = vec3(
+        objectSDF(pos + vec3(epsilon,0,0),plane,sphere),
+        objectSDF(pos + vec3(0,epsilon,0),plane,sphere),
+        objectSDF(pos + vec3(0,0,epsilon),plane,sphere)
+    );
+    vec3 vector2 = vec3(
+        objectSDF(pos - vec3(epsilon,0,0),plane,sphere),
+        objectSDF(pos - vec3(0, epsilon,0),plane,sphere),
+        objectSDF(pos - vec3(0,0,epsilon),plane,sphere)
+    );
+    return vector1-vector2;
+}
+
 vec3 render(vec2 uv){
     vec3 ro = vec3(0,0,-imgDist);
     vec3 rd = vec3(uv.xy, imgDist);
     normalize(rd);
     
-    Light light = Light(vec3(0,2,10) , 10.0);
+    Light light = Light(vec3(0,2,6) , 40.0);
     Sphere sphere = Sphere(
-        vec3(0,0, 6. + sin(u_time))
+        vec3(0. + cos(u_time),0, 6. + sin(u_time))
         ,2.0,
-        vec3(0.66, 0.08, 1.0)
+        vec3(0.0, 0.1, 1.0)
     );
     Plane plane = Plane(
         vec3(0,-10.0,0),
@@ -56,36 +71,40 @@ vec3 render(vec2 uv){
         vec3(0.4)
     );
 
-    // const int iterationLimit = 100;
-    // vec3 pos = ro;
+    const int iterationLimit = 250;
+    vec3 pos = ro;
+
     // float step = sphereSDF(pos, sphere);
+    // float step = objectSDF(pos, plane, sphere);
     // for (int i = 0; i < iterationLimit; i ++){
     //     pos += rd * step;
-    //     step = sphereSDF(pos, sphere);
+    //     // step = sphereSDF(pos, sphere);
+    //     step = objectSDF(pos,plane,sphere);
     //     if (step < 0.01){
-    //         float dist = length(pos - ro);
-    //         float percentage =  1. - (dist - sphereSDF(ro,sphere)) / sphereSDF(ro,sphere);
-    //         return sphere.color * percentage;
+            // // float dist = length(pos - ro);
+            // // float percentage =  1. - (dist - sphereSDF(ro,sphere)) / sphereSDF(ro,sphere);
+            // vec3 surfaceNormal = calculateNormal(pos,plane,sphere);
+            // vec3 reflection = reflect(rd,surfaceNormal);
+            // vec3 lightReflection = light.intensity * reflect(normalize( light.pos - pos),surfaceNormal);
+            // return sphere.color * .3 * dot(reflection, lightReflection);
     //     }
     // }
 
-    const int iterationLimit = 10000;
-    vec3 pos = ro;
     float step = planeSDF(pos, plane);
     for (int i = 0; i < iterationLimit; i ++){
         pos += rd * step;
         step = planeSDF(pos, plane);
         if (step < 0.01){
             float dist = length(pos - ro);
-            
-            // return plane.color * dot((pos - ro), vec3(0,1.,0));
-            return plane.color - 0.02 * sqrt(dist);
+            vec3 surfaceNormal = calculateNormal(pos,plane,sphere);
+            vec3 reflection = reflect(rd,surfaceNormal);
+            vec3 lightReflection = 1. * light.intensity * reflect(normalize(light.pos - pos),surfaceNormal);
+            return plane.color * dot(reflection, lightReflection);;
+            // return plane.color - 0.02 * sqrt(dist);
         }
     }
-    return vec3(1);
 
-    
-    // vec3 color = vec3()
+    return vec3(1);
 
     // return vec3(uv.xy,0);
 }
