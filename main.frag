@@ -39,12 +39,33 @@ struct Plane{
 
 float planeSDF(vec3 pos, Plane plane){
     // return plane.position.y - pos.y;
-    return pos.y - plane.position.y;
+    vec3 adjustedPos = pos - plane.position;
+    float distance = dot(adjustedPos, plane.normal);
+    return distance;
 }
 
 float sphereSDF(vec3 pos, Sphere sphere){
-    return length(mod(pos,4.) - sphere.pos) - sphere.radius;    
+    vec3 newPos;
+    newPos = pos;
+    // float k = sphere.pos.x - sphere.radius;
+    // float k2 = 1.2;
+    // float k3 = 1.8;
+    // float x = pos.x;
+    // x = abs(pos.x);
+    // x = abs(x-k2)+k2;
+    // x = abs(x-k3)+k3;
+
+    // newPos = vec3(x, pos.yz);
+    // newPos = vec3(abs(pos.x-k)+k,pos.yz);
+    // newPos = vec3(abs(newPos.x), newPos.yz);
+    return length(mod(pos,4.) - sphere.pos) - sphere.radius;  //for infinite renders  
+    // return length(sphere.pos - newPos) - sphere.radius;
+}
+
+float reflectedSphereSDF(vec3 pos, Sphere sphere){
+    pos = vec3(abs(pos.x), pos.yz);
     return length(sphere.pos - pos) - sphere.radius;
+
 }
 
 /*returns the nearest SDF from any possible object
@@ -99,35 +120,31 @@ vec3 softShadow(vec3 pos, Light light, Plane plane, Sphere sphere){
 }
 
 vec3 render(vec2 uv){
-    vec3 ro = vec3(0,0,-imgDist);
+    vec3 ro = vec3(0. + 0.5 * u_time,0. + u_time,-imgDist + u_time);
+    // vec3 ro = vec3(0.,0.,-imgDist);
     vec3 rd = vec3(uv.xy, imgDist);
     vec3 skyColor = vec3(0.5725, 0.8588, 1.0);
     rd = normalize(rd);
     
     Light light = Light(vec3(0. , 5.0  , 6.), 2.0);
     Sphere sphere = Sphere(
-        //+ sin(2. * u_time)
-        //+ cos(2. * u_time)
-        vec3(2 ,2, 2)
+        vec3(2. ,2. , 2.)
         ,.5,
         vec3(0.1216, 0.1216, 0.8353),
         .3
     );
     Plane plane = Plane(
-        vec3(0,-3.0,0),
-        vec3(0,1,0),
+        vec3(0.,-3.,.0),
+        normalize(vec3(0.,1,0)),
         vec3(0.1451, 0.1451, 0.1451)
     );
-
 
     const int iterationLimit = 300;
     vec3 pos = ro;
 
-    // float step = sphereSDF(pos,sphere);
     float step = objectSDF(pos, plane, sphere);
     for (int i = 0; i < iterationLimit; i ++){
         pos += rd * step;
-        // step = sphereSDF(pos,sphere);
         step = objectSDF(pos,plane,sphere);
         if (step > 100.){
             break;
@@ -152,18 +169,14 @@ vec3 render(vec2 uv){
             float sphereDist = sphereSDF(pos,sphere);
             float planeDist = planeSDF(pos,plane);
 
-            // return vec3(mod(length(pos + vec3(0.,0.,imgDist)),4.));
-            // return vec3(sphereDist);
-            // return pos/2.;
-            // return  (sphere.color) * lighting;
-
-
-            float fogRate = .0075;
+            float fogRate = .005;
             if (sphereDist < planeDist){
-                return lerp(sphere.color * lighting, skyColor, (length(pos)-5.) * fogRate);
+                // return surfaceNormal;
+                // return vec3(pos/20.);
+                return lerp(sphere.color * lighting, skyColor, (length(pos-ro)-5.) * fogRate);
             }
             else if(planeDist < sphereDist){
-                return lerp(plane.color * lighting, skyColor, (length(pos)-5.) * fogRate);
+                return lerp(plane.color * lighting, skyColor, (length(pos-ro)-5.) * fogRate);
             }
         }
     }
